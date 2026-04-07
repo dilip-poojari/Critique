@@ -1,5 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Anthropic from '@anthropic-ai/sdk';
+
+// AI Provider configurations
+const AI_PROVIDERS = {
+  anthropic: {
+    name: 'Anthropic Claude',
+    icon: '🤖',
+    keyPrefix: 'sk-ant-',
+    keyPlaceholder: 'sk-ant-...',
+    getKeyUrl: 'https://console.anthropic.com/',
+    description: 'Claude Sonnet 4 - Best for detailed UX analysis'
+  },
+  openai: {
+    name: 'OpenAI GPT-4',
+    icon: '🧠',
+    keyPrefix: 'sk-',
+    keyPlaceholder: 'sk-...',
+    getKeyUrl: 'https://platform.openai.com/api-keys',
+    description: 'GPT-4 Vision - Great for visual analysis'
+  },
+  gemini: {
+    name: 'Google Gemini',
+    icon: '✨',
+    keyPrefix: '',
+    keyPlaceholder: 'Your Gemini API key',
+    getKeyUrl: 'https://makersuite.google.com/app/apikey',
+    description: 'Gemini Pro Vision - Fast and accurate'
+  }
+};
 
 // Severity colors and icons
 const SEVERITY_CONFIG = {
@@ -37,6 +64,7 @@ function App() {
   const [figmaInput, setFigmaInput] = useState('');
   const [contextInput, setContextInput] = useState('');
   const [personaInput, setPersonaInput] = useState('');
+  const [aiProvider, setAiProvider] = useState('anthropic');
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
@@ -59,7 +87,12 @@ function App() {
       }
     }
     
-    const savedApiKey = localStorage.getItem('critfull-api-key');
+    const savedProvider = localStorage.getItem('critfull-ai-provider');
+    if (savedProvider) {
+      setAiProvider(savedProvider);
+    }
+    
+    const savedApiKey = localStorage.getItem(`critfull-api-key-${savedProvider || 'anthropic'}`);
     if (savedApiKey) {
       setApiKey(savedApiKey);
     }
@@ -124,66 +157,112 @@ function App() {
     return 'F';
   };
 
-  const runCritique = async () => {
-    if (!apiKey) {
-      setShowApiKeyInput(true);
-      setError('Please enter your Anthropic API key to continue.');
-      return;
+  const callAnthropicAPI = async (userMessage, base64Image = null) => {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: base64Image ? [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: uploadedImage.type,
+                data: base64Image
+              }
+            },
+            { type: 'text', text: userMessage }
+          ] : [{ type: 'text', text: userMessage }]
+        }],
+        system: getSystemPrompt()
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
     }
 
-    if (!uploadedImage && !urlInput && !figmaInput) {
-      setError('Please provide a design to critique (upload, URL, or Figma link).');
-      return;
+    const data = await response.json();
+    return data.content[0].text;
+  };
+
+  const callOpenAIAPI = async (userMessage, base64Image = null) => {
+    const messages = [{
+      role: 'user',
+      content: base64Image ? [
+        { type: 'text', text: userMessage },
+        {
+          type: 'image_url',
+          image_url: { url: `data:${uploadedImage.type};base64,${base64Image}` }
+        }
+      ] : userMessage
+    }];
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4-vision-preview',
+        messages: [
+          { role: 'system', content: getSystemPrompt() },
+          ...messages
+        ],
+        max_tokens: 4096
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
     }
 
-    setError(null);
-    setView('loading');
-    setLoadingProgress(0);
-    setLoadingMessage(LOADING_MESSAGES[0]);
+    const data = await response.json();
+    return data.choices[0].message.content;
+  };
 
-    try {
-      const anthropic = new Anthropic({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true
+  const callGeminiAPI = async (userMessage, base64Image = null) => {
+    const parts = [{ text: getSystemPrompt() + '\n\n' + userMessage }];
+    
+    if (base64Image) {
+      parts.push({
+        inline_data: {
+          mime_type: uploadedImage.type,
+          data: base64Image
+        }
       });
+    }
 
-      let userMessage = '';
-      const messageContent = [];
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          maxOutputTokens: 4096,
+          temperature: 0.4
+        }
+      })
+    });
 
-      // Build context
-      if (contextInput) {
-        userMessage += `Design Context: ${contextInput}\n\n`;
-      }
-      if (personaInput) {
-        userMessage += `Target Users/Personas: ${personaInput}\n\n`;
-      }
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.statusText}`);
+    }
 
-      // Handle different input types
-      if (uploadedImage) {
-        userMessage += 'Please analyze this design screenshot.\n';
-        const base64Image = imagePreview.split(',')[1];
-        const imageType = uploadedImage.type.split('/')[1];
-        
-        messageContent.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: uploadedImage.type,
-            data: base64Image
-          }
-        });
-      } else if (urlInput) {
-        userMessage += `Please analyze the design at this URL: ${urlInput}\n`;
-      } else if (figmaInput) {
-        userMessage += `Please analyze this Figma design: ${figmaInput}\n`;
-      }
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+  };
 
-      messageContent.push({
-        type: 'text',
-        text: userMessage
-      });
-
-      const systemPrompt = `You are an elite UX Design Critic and Accessibility Auditor with 20+ years of enterprise design experience. You have deep expertise in:
+  const getSystemPrompt = () => `You are an elite UX Design Critic and Accessibility Auditor with 20+ years of enterprise design experience. You have deep expertise in:
 
 1. **Carbon Design System** — IBM's open-source design system. Evaluate component usage, spacing (8px grid), color tokens, typography scale, iconography (Carbon Icons), and interaction patterns.
    Reference: https://carbondesignsystem.com/
@@ -270,54 +349,6 @@ Categories: "carbon" | "carbon-for-cloud" | "accessibility" | "wcag" | "heuristi
 
 Be specific, actionable, and reference exact Carbon tokens, WCAG success criteria numbers, or specific law names. Aim for 8-15 issues total across severities. Be honest but constructive.`;
 
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: messageContent
-        }]
-      });
-
-      setLoadingProgress(100);
-
-      // Parse the response
-      const responseText = response.content[0].text;
-      let critiqueData;
-      
-      try {
-        // Try to extract JSON if wrapped in markdown
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          critiqueData = JSON.parse(jsonMatch[0]);
-        } else {
-          critiqueData = JSON.parse(responseText);
-        }
-      } catch (parseError) {
-        console.error('Failed to parse response:', responseText);
-        throw new Error('Failed to parse AI response. Please try again.');
-      }
-
-      // Add timestamp and input info
-      critiqueData.timestamp = new Date().toISOString();
-      critiqueData.inputType = inputType;
-      
-      setResults(critiqueData);
-      
-      // Save to history
-      const newHistory = [critiqueData, ...history].slice(0, 5);
-      setHistory(newHistory);
-      localStorage.setItem('critfull-history', JSON.stringify(newHistory));
-      
-      setView('results');
-    } catch (err) {
-      console.error('Critique error:', err);
-      setError(err.message || 'Failed to analyze design. Please check your API key and try again.');
-      setView('input');
-    }
-  };
-
   const saveApiKey = () => {
     if (apiKey) {
       localStorage.setItem('critfull-api-key', apiKey);
@@ -401,15 +432,26 @@ Be specific, actionable, and reference exact Carbon tokens, WCAG success criteri
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-4xl">
         {/* Header */}
-        <div className="text-center mb-12 animate-fadeIn">
-          <h1 className="text-5xl sm:text-7xl font-bold mb-4 gradient-text">
-            CritFull
-          </h1>
-          <p className="text-xl sm:text-2xl text-[var(--ibm-text-secondary)] mb-2">
+        <div className="text-center mb-16 animate-fadeIn">
+          <div className="mb-6">
+            <h1 className="text-6xl sm:text-8xl font-bold mb-6 gradient-text" style={{ lineHeight: '1.1' }}>
+              CritFull
+            </h1>
+            <div className="h-1 w-32 mx-auto bg-gradient-to-r from-transparent via-[var(--ibm-blue)] to-transparent rounded-full"></div>
+          </div>
+          <p className="text-2xl sm:text-3xl text-[var(--ibm-text-primary)] mb-3 font-medium">
             UX Design Critique & Review Tool
           </p>
-          <p className="text-sm text-[var(--ibm-text-disabled)]">
-            Powered by Claude AI • Carbon Design System • WCAG 2.2
+          <p className="text-base text-[var(--ibm-text-secondary)] flex items-center justify-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--ibm-layer)] rounded-full text-sm border border-[var(--ibm-border)]">
+              🤖 AI-Powered
+            </span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--ibm-layer)] rounded-full text-sm border border-[var(--ibm-border)]">
+              🎨 Carbon Design
+            </span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[var(--ibm-layer)] rounded-full text-sm border border-[var(--ibm-border)]">
+              ♿ WCAG 2.2
+            </span>
           </p>
         </div>
 

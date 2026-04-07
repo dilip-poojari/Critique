@@ -1,17 +1,38 @@
 :root {
   --ibm-blue: #0f62fe;
   --ibm-blue-hover: #0353e9;
-  --ibm-background: #161616;
-  --ibm-layer: #262626;
-  --ibm-layer-2: #393939;
-  --ibm-border: #525252;
+  --ibm-blue-light: #4589ff;
+  --ibm-purple: #8a3ffc;
+  --ibm-cyan: #1192e8;
+  --ibm-background: #0a0a0a;
+  --ibm-background-alt: #161616;
+  --ibm-layer: #1c1c1c;
+  --ibm-layer-hover: #262626;
+  --ibm-layer-2: #2a2a2a;
+  --ibm-layer-3: #393939;
+  --ibm-border: #3d3d3d;
+  --ibm-border-subtle: #2a2a2a;
   --ibm-text-primary: #f4f4f4;
   --ibm-text-secondary: #c6c6c6;
   --ibm-text-disabled: #6f6f6f;
-  --ibm-support-error: #fa4d56;
-  --ibm-support-warning: #f1c21b;
-  --ibm-support-success: #42be65;
+  --ibm-support-error: #ff6b6b;
+  --ibm-support-warning: #ffd93d;
+  --ibm-support-success: #51cf66;
   --ibm-support-info: #4589ff;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #0f62fe 0%, #8a3ffc 100%);
+  --gradient-success: linear-gradient(135deg, #51cf66 0%, #1192e8 100%);
+  --gradient-warning: linear-gradient(135deg, #ffd93d 0%, #ff6b6b 100%);
+  --gradient-card: linear-gradient(145deg, #1c1c1c 0%, #262626 100%);
+  
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 20px rgba(15, 98, 254, 0.3);
+  --shadow-glow-hover: 0 0 30px rgba(15, 98, 254, 0.5);
 }
 
 * {
@@ -22,7 +43,8 @@
 
 body {
   font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: var(--ibm-background);
+  background: radial-gradient(ellipse at top, var(--ibm-background-alt) 0%, var(--ibm-background) 50%);
+  background-attachment: fixed;
   color: var(--ibm-text-primary);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -31,10 +53,32 @@ body {
 
 #root {
   min-height: 100vh;
+  position: relative;
+}
+
+/* Background pattern */
+#root::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(15, 98, 254, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(138, 63, 252, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root > * {
+  position: relative;
+  z-index: 1;
 }
 
 .mono {
   font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: -0.02em;
 }
 
 /* Scrollbar styling */
@@ -122,36 +166,125 @@ body {
 
 /* Utility classes */
 .gradient-text {
-  background: linear-gradient(135deg, var(--ibm-blue) 0%, var(--ibm-support-info) 100%);
+  background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 .glass-effect {
-  background: rgba(38, 38, 38, 0.6);
-  backdrop-filter: blur(10px);
+  background: rgba(28, 28, 28, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--ibm-border);
+  box-shadow: var(--shadow-md);
 }
 
 .hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hover-lift:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+/* Card styles */
+.card-modern {
+  background: var(--gradient-card);
+  border: 1px solid var(--ibm-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-modern:hover {
+  border-color: var(--ibm-blue);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(15, 98, 254, 0.2);
+}
+
+/* Button styles */
+.btn-primary {
+  background: var(--gradient-primary);
+  border: none;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  box-shadow: var(--shadow-md), var(--shadow-glow-hover);
+  transform: translateY(-2px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Input styles */
+.input-modern {
+  background: var(--ibm-layer);
+  border: 2px solid var(--ibm-border-subtle);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.input-modern:focus {
+  border-color: var(--ibm-blue);
+  box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.1), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  background: var(--ibm-layer-hover);
+}
+
+.input-modern:hover:not(:focus) {
+  border-color: var(--ibm-border);
+  background: var(--ibm-layer-hover);
+}
+
+/* Badge styles */
+.badge-modern {
+  background: var(--ibm-layer-2);
+  border: 1px solid var(--ibm-border);
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.badge-modern:hover {
+  background: var(--ibm-layer-3);
+  transform: scale(1.05);
 }
 
 /* Focus styles for accessibility */
 *:focus-visible {
-  outline: 2px solid var(--ibm-blue);
-  outline-offset: 2px;
+  outline: 3px solid var(--ibm-blue);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 button:focus-visible {
-  outline: 2px solid var(--ibm-blue);
-  outline-offset: 2px;
+  outline: 3px solid var(--ibm-blue);
+  outline-offset: 3px;
 }
 
 /* Print styles */
